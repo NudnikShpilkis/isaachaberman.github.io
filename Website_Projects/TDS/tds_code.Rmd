@@ -1,0 +1,297 @@
+---
+title: "Episode 1: Ride to Glory"
+author: "Isaac Haberman"
+date: "February 21, 2016"
+output: pdf_document
+---
+\small
+\section{Introduction and Exploratory Data Analysis}
+
+\paragraph{}
+The Citibike bike share program in New York City is looking to add two more bike share locations. These sites should be decided based on two factors, Raising traffic (in both subscribers and non-subscribers) and increasing female traffic. 
+
+\paragraph{}
+We began by identifying the variable most important for determining whether somebody is a customer (non-subscriber) or subscriber using classification trees.  Our trees demonstrated that the trips duration was the most important classification variable.  Using this information, we plotted the trip duration histogram below.  The red line on the graph, represents 30 minutes, after which price increases.  We were thus able to find a set of outliers, which we identified as rides above 3600 seconds, or 1 hour.  We found that Customers tended to stay near that limit, as can be seen in the table below.  Subscribers, however, tended to use bikes for shorter rides, mostly under 20 minutes. 
+
+\paragraph{}
+We then theorized that there may be significant differences during the different periods of the work day.  Theorizing, that there were morning commuters, evening commuters and leisure riders in the middle of the day.  We plotted the top destinations and starting points on a geogrphical mapping of New York City.  Below is the graph, the red and yellow dots represent Customers and blue to green represents Subscriebrs.  Using this classification and this graph, we identified how Subscribers, the majority of our data, used bikes.  We found short trips, often from bus and subway stations and major traffic hubs to destinations less than 20 minutes away.  With this information, we designed our model.
+
+```{r Data, echo = FALSE, message = FALSE, warning = FALSE}
+
+suppressMessages(library(ggplot2))
+suppressMessages(library(gridExtra))
+suppressMessages(library(knitr))
+suppressMessages(library(caret))
+suppressMessages((library(mgcv)))
+suppressMessages(library(ggmap))
+
+citi.bike <- read.csv("C:\\Users\\isaac\\OneDrive\\GitHub\\TartanCup\\citibike.csv")
+
+#Outlier removal
+citi.bike.less <- citi.bike[which(citi.bike$tripduration <= 3600),]
+  
+```
+
+```{r EDA, echo = FALSE, out.height="0.20\\textheight", fig.align="center", warning = FALSE, message = FALSE}
+
+#trees
+set.seed(100)
+
+tree.data <- citi.bike.less[,-c(2,3,6,7,12,13)]
+
+#Second tree
+bike.tree2 <- train(usertype ~., data = tree.data,
+                      method = "ctree",
+                      trControl = trainControl(method = "cv", number = 5),
+                      tuneGrid = expand.grid(mincriterion = 0.95))
+
+#Histogram of TripDuration
+trip.plot <- ggplot(citi.bike.less, aes(tripduration)) + 
+             ggtitle("Density Plot of Trip Duration") + 
+             xlab("Trip Duration") + ylab("Density")
+
+trip.plot + geom_density(alpha = 0.5) + 
+            geom_vline(aes(xintercept = 1800), color = "red") + 
+            aes(x = tripduration, fill = usertype) + 
+            ggtitle("Trip Duration\nSplit by user type\nLine indicating 30 Min")
+# read data
+citibike <- read.csv("citibike.csv")
+
+#plot the  hybrid Google Maps basemap
+map <- qmap('New York City', zoom = 12, maptype = 'hybrid')
+
+#Splits data
+customers <- citi.bike[which(citi.bike$usertype =="Customer"),]
+subscribers <- citi.bike[which(citi.bike$usertype == "Subscriber"),]
+
+#Frequencies of start stations
+c.table.start<-table(customers$start.station.name)
+s.table.start<-table(subscribers$start.station.name)
+
+#Plotted points
+take <- 25
+
+#Data to plot for start
+top.start.c <- sort(c.table.start,decreasing=TRUE)[1:take]
+top.start.s <- sort(s.table.start,decreasing=TRUE)[1:take]
+
+#Frequencies of final stations
+c.table.end<-table(customers$end.station.name)
+s.table.end<-table(subscribers$end.station.name)
+
+#Data to plot
+top.end.c <- sort(c.table.end,decreasing=TRUE)[1:take]
+top.end.s <- sort(s.table.end,decreasing=TRUE)[1:take]
+
+#Latitudes and longitudes of Start Points
+start.lat.c<-unique(citi.bike$start.station.latitude[which(citi.bike$start.station.name %in% names(top.start.c))])
+end.lat.c<-unique(citi.bike$end.station.latitude[which(citi.bike$end.station.name %in% names(top.end.c))])
+start.lon.c<-unique(citi.bike$start.station.longitude[which(citi.bike$start.station.name %in% names(top.start.c))])
+end.lon.c<-unique(citi.bike$end.station.longitude[which(citi.bike$end.station.name %in% names(top.end.c))])
+
+#Latitudes and longitudes of end points
+start.lat.s<-unique(citi.bike$start.station.latitude[which(citi.bike$start.station.name %in% names(top.start.s))])
+end.lat.s<-unique(citi.bike$end.station.latitude[which(citi.bike$end.station.name %in% names(top.end.s))])
+start.lon.s<-unique(citi.bike$start.station.longitude[which(citi.bike$start.station.name %in% names(top.start.s))])
+end.lon.s<-unique(citi.bike$end.station.longitude[which(citi.bike$end.station.name %in% names(top.end.s))])
+
+cust <- data.frame(start=as.vector(top.start.c), startname = names(top.start.c), startlat = start.lat.c,startlon = start.lon.c, end=as.vector(top.end.c),endname=names(top.end.c),endlat=end.lat.c,endlon=end.lon.c)
+sub <- data.frame(start=as.vector(top.start.s), startname = names(top.start.s), startlat = start.lat.s,startlon = start.lon.s, end=as.vector(top.end.s),endname=names(top.end.s),endlat=end.lat.s,endlon=end.lon.s)
+
+map + geom_point(data = cust,aes(x = startlon, y = startlat),color="red",size=3,alpha=.5) + 
+      geom_point(data = sub, aes(x = startlon,y = startlat),color="blue",size=3,alpha=.5) +
+      geom_point(data = cust,aes(x = endlon, y = endlat),color="yellow",size=3,alpha=.5) + 
+      geom_point(data = sub, aes(x = endlon,y = endlat),color="green",size=3,alpha=.5)
+
+```
+
+\section{Modeling}
+\paragraph{}
+To determine the optimal placement of the new bike stations, we must build a model that takes in a placement location and determines how effective that placement is. Total traffic through a bike station was used as a measure of effectiveness (number of riders starting at the location + number of riders ending at the location). We fit linear and general additive models to predict the total number of people who will start and end at a given latitude and longitude. Since the general additive models had a lower cross validated mean square error, we chose to use them over the linear models. 
+
+\paragraph{}
+We predicted our models on three subsets of our dataset: women subscribers, non male-subscribers and everyone. Since we found earlier in our analysis that traffic hubs, such as Penn Station and Grand Central Terminal, are places that many people like to take bikes to and from. We formed a small radius outside of Penn Station and Grand Central Terminal and predicted over those areas. From these predictions, we found the latitude and longitude corresponding to the highest predicted traffic for each of these subsets.
+
+```{r Modeling, echo = FALSE, message = FALSE}
+
+#First additive model
+start.station<-table(citibike$start.station.name)
+end.station<-table(citibike$end.station.name)
+bike<-data.frame(name=names(end.station),start = as.vector(start.station),end = as.vector(end.station),lat = NA,lon=NA)
+
+for (i in 1:nrow(bike)){
+  idx = which(citibike$start.station.name == bike$name[i])[1]
+  lat = citibike$start.station.latitude[idx]
+  lon = citibike$start.station.longitude[idx]
+  bike$lat[i] = lat
+  bike$lon[i] = lon
+}
+
+linear.start<-lm(start~lat+lon,data=bike)
+linear.end<-lm(end~lat+lon,data=bike)
+model.start<-gam(start~s(lat)+s(lon),data=bike)
+model.end<-gam(end~s(lat)+s(lon),data=bike)
+
+#mean(linear.start$residuals^2)
+#mean(linear.end$residuals^2)
+#mean(model.start$residuals^2)
+#mean(model.end$residuals^2)
+
+penn.east<- -73.987445
+penn.west<- -73.994736
+penn.north<- 40.767745
+penn.south<- 40.758023
+
+
+gc.east<- -73.9765
+gc.west<- -73.9253
+gc.north<-40.7728
+gc.south<-40.6567
+
+#Find location based on lat and lon
+findBest<-function(north,south,east,west){
+  
+  lons<-c(west,east)
+  lats<-c(north,south)
+  
+  best = 0
+  bestLat = c()
+  bestLon = c()
+  
+  for (lat in range(lats)){
+    for (lon in range(lons)){
+      start<-predict(model.start,newdata=data.frame(lat=lat,lon=lon))
+      end<-predict(model.end,newdata=data.frame(lat=lat,lon=lon))
+      if (start + end > best){
+        best = start + end
+        bestLat = c(bestLat,lat)
+        bestLon = c(bestLon,lon)
+      }
+    }
+  }
+  
+  paste("The best coordinates are - lat: ",bestLat,"  lon: ",bestLon)
+}
+
+#findBest(penn.north,penn.south,penn.east,penn.west)
+#findBest(gc.north,gc.south,gc.east,gc.west)
+
+#Modeling for women
+women<-citibike[which(citibike$gender == 2),]
+start.station.women<-table(women$start.station.name)
+end.station.women<-table(women$end.station.name)
+bike.women<-data.frame(name=names(end.station.women),start = as.vector(start.station.women),end = as.vector(end.station.women),lat = NA,lon=NA)
+
+for (i in 1:nrow(bike)){
+  idx = which(women$start.station.name == bike.women$name[i])[1]
+  lat = women$start.station.latitude[idx]
+  lon = women$start.station.longitude[idx]
+  bike$lat[i] = lat
+  bike$lon[i] = lon
+}
+
+linear.start.women<-lm(start~lat+lon,data=bike)
+linear.end.women<-lm(end~lat+lon,data=bike)
+model.start.women<-gam(start~s(lat)+s(lon),data=bike)
+model.end.women<-gam(end~s(lat)+s(lon),data=bike)
+
+#mean(linear.start.women$residuals^2)
+#mean(linear.end.women$residuals^2)
+#mean(model.start.women$residuals^2)
+#mean(model.end.women$residuals^2)
+
+#Model for women, lat and lon
+findBestForWomen<-function(north,south,east,west){
+  
+  lons<-c(west,east)
+  lats<-c(north,south)
+  
+  best = 0
+  bestLat = c()
+  bestLon = c()
+  
+  for (lat in range(lats)){
+    for (lon in range(lons)){
+      start<-predict(model.start.women,newdata=data.frame(lat=lat,lon=lon))
+      end<-predict(model.end.women,newdata=data.frame(lat=lat,lon=lon))
+      if (start + end > best){
+        best = start + end
+        bestLat = c(bestLat,lat)
+        bestLon = c(bestLon,lon)
+      }
+    }
+  }
+  paste("The best coordinates are - lat: ",bestLat,"  lon: ",bestLon)
+}
+
+#findBestForWomen(penn.north,penn.south,penn.east,penn.west)
+#findBestForWomen(gc.north,gc.south,gc.east,gc.west)
+
+#Women and customers
+wc<-citibike[which(citibike$gender != 1),]
+start.station.wc<-table(wc$start.station.name)
+end.station.wc<-table(wc$end.station.name)
+bike.wc<-data.frame(name=names(end.station.wc),start = as.vector(start.station.wc),end = as.vector(end.station.wc),lat = NA,lon=NA)
+
+for (i in 1:nrow(bike.wc)){
+  idx = which(wc$start.station.name == bike.wc$name[i])[1]
+  lat = wc$start.station.latitude[idx]
+  lon = wc$start.station.longitude[idx]
+  bike.wc$lat[i] = lat
+  bike.wc$lon[i] = lon
+}
+
+linear.start.wc<-lm(start~lat+lon,data=bike.wc)
+linear.end.wc<-lm(end~lat+lon,data=bike.wc)
+model.start.wc<-gam(start~s(lat)+s(lon),data=bike.wc)
+model.end.wc<-gam(end~s(lat)+s(lon),data=bike.wc)
+
+#mean(linear.start.wc$residuals^2)
+#mean(linear.end.wc$residuals^2)
+#mean(model.start.wc$residuals^2)
+#mean(model.end.wc$residuals^2)
+
+#Model for women and customers
+findBestForWomenAndCustomers<-function(north,south,east,west){
+  
+  lons<-c(west,east)
+  lats<-c(north,south)
+  
+  best = 0
+  bestLat = c()
+  bestLon = c()
+  
+  for (lat in range(lats)){
+    for (lon in range(lons)){
+      start<-predict(model.start.wc,newdata=data.frame(lat=lat,lon=lon))
+      end<-predict(model.end.wc,newdata=data.frame(lat=lat,lon=lon))
+      if (start + end > best){
+        best = start + end
+        bestLat = c(bestLat,lat)
+        bestLon = c(bestLon,lon)
+      }
+    }
+  }
+  paste("The best coordinates are - lat: ",bestLat,"  lon: ",bestLon)
+}
+
+#findBestForWomenAndCustomers(penn.north,penn.south,penn.east,penn.west)
+#findBestForWomenAndCustomers(gc.north,gc.south,gc.east,gc.west)
+
+```
+
+\section{Results And Conclusion}
+\paragraph{}
+Using our general additive models we identified two locations we think best answer our initial factors.  The first site we chose was 41st and Dywer Ave (40.758023, -73.994736) near the Lincoln tunnel.  Two of our models, initial and gender, identified this location based on the coordiantes of Penn Station and the surrounding area.  In this area, there is a large gap between this site and other bike share stations, it has access to CUNY and Port Authority.  These two sites are key as university students are tradionally a large bike using group, and as we found in our exploratory data analysis, large traffic hubs are important locations for Subscribers.  The other site we identified was 67th and West Drive (40.7728,-73.9765) in Central Park.  We identified this site through our initial and gender model.  Since most Customers, ride less than 25 minutes, we theorize that many Customers will stop in Central Park to relax and have a good time.  This site is also along West Drive, which is the best way to traverse Central Park.
+
+Below are graphical displays of the two spots we have chosen.
+
+```{r FinalMapping, echo = FALSE, message = FALSE, out.height="0.20\\textheight", fig.align="center"}
+
+map2 <- qmap('New York City', zoom = 12, maptype = 'hybrid')
+
+final.points <- data.frame(lat = c(40.758023, 40.7728), lon = c(-73.994736,-73.9756))
+
+map2 + geom_point(data = final.points, aes(x = lon, y = lat),color="red", size = 5, alpha = .5)
+
+```

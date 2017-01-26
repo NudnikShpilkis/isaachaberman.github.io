@@ -1,0 +1,914 @@
+---
+title: "Exam 3"
+author: "Isaac Haberman"
+date: "May 3, 2016"
+output: pdf_document
+---
+
+```{r Libraries, Data, functions, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(mgcv)
+library(knitr)
+library(ggplot2)
+library(poLCA)
+library(caret)
+library(plyr)
+library(np)
+
+macro <- na.omit(read.csv("http://www.stat.cmu.edu//~cshalizi//uADA//16//exams//3//macro.csv"))
+ 
+#Time Series into Design Matrix
+#Professor Shalizi's Code
+design.matrix.from.ts <- function(ts, order, right.older = FALSE) {
+  n <- length(ts)
+  x <- ts[(order + 1):n]
+  for (lag in 1:order) {
+    if (right.older) {
+    x <- cbind(x, ts[(order + 1 - lag):(n - lag)])
+    }
+    else {
+    x <- cbind(ts[(order + 1 - lag):(n - lag)], x)
+    }
+  }
+  lag.names <- c("lag0", paste("lag", 1:order, sep = ""))
+  if (right.older) {
+    colnames(x) <- lag.names
+    }
+  else {
+    colnames(x) <- rev(lag.names)
+    }
+  return(as.data.frame(x))
+}
+
+```
+
+```{r Mean Square Error Bootstrap, echo = FALSE, warning = FALSE, message = FALSE}
+
+
+#Multivariate Time Series Resampler
+rblockboot <- function(ts, block.length, len.out = nrow(ts)) { 
+  #Turn columns into list of data frames
+  the.blocks <- lapply(ts, design.matrix.from.ts, block.length - 1)
+  #Turn data frames into matrices
+  the.blocks <- llply(the.blocks, as.matrix.data.frame)
+  #Number of rows in one of the list (they should all be the same)
+  blocks.in.ts <- nrow(the.blocks[[1]])
+  stopifnot(blocks.in.ts == nrow(ts) - block.length + 1)
+  blocks.needed <- ceiling(len.out/block.length)
+  picked.blocks <- sample(1:blocks.in.ts, size = blocks.needed, replace = TRUE)
+  #Proper amount of rows per matrix
+  cols <- lapply(the.blocks, function(x) x[picked.blocks,])
+  #Turn into column
+  cols <- lapply(cols, function(x) data.frame(x[1:len.out]))
+  #bid data frame and name
+  new.df <- data.frame(cols)
+  colnames(new.df) <- names(the.blocks)
+  return(new.df)
+} 
+
+
+#Mean Squared Error for Bootstrap
+model.residuals <- function(dat, model, formula) { 
+  new.model <- model(formula, data = dat)
+  return(as.vector(residuals(new.model)))
+}
+
+#bootstrap for MSE
+mse.bootstrap <- function(B, dat, model, formula, order) { 
+    formula <- as.formula(formula)
+    boots <- replicate(B, model.residuals(rblockboot(dat, order), model, formula))
+    mse <- mean(boots^2)
+    return(mse)
+} 
+
+
+#Predictions for Bootstrap
+model.pred <- function(dat.m, dat.p, model, formula, col) { 
+  new.model <- model(formula, data = dat.m)
+  #predictions
+  preds <- predict(new.model, newdata = dat.p)
+  #Residuals
+  residuals <- as.vector(preds - dat.p[,col])
+  return(residuals)
+}
+
+
+#Bootstrap for Predictions
+#dat.m = model data
+#dat.p predictions data
+#col = column to predict on
+pred.bootstrap <- function(B, dat.m, dat.p, model, formula, order, col) { 
+    formula <- as.formula(formula)
+    boots <- replicate(B, model.pred(rblockboot(dat.m, order), dat.p, model, formula, col))
+    #MSE
+    mse <- mean(boots^2)
+    return(mse)
+}
+
+```
+
+\section{Introduction}
+\paragraph{}
+One of the foundational theories of modern macroeconomics is the real business cycle theory, where the business cycle results from an economy reacting to external forces opposed to economic concerns.  We are investigating the relationship between productivity, measured in output per hour worked for non-financial firms, and four measures of the economy, GDP, value of goods, investment spending and total hours worked.  To this end, we have seven specific problems we will attempt to answer to best understand the theory.  We will be using economic data from the United States from 1947 to 2016 in a dataset which we will refer to as `macro`.
+
+\paragraph{Notes}
+For the purpose of this paper, two rows have been removed from the dataset, as they contained NA's.  We felt that those rows would not contribute to our models as we would be unable to predict from them and unable to use them in many of our functions.  For the purpose of our bootstrap, our parametric models have been bootstrapped one thousand times, while our non-parametric models have been bootstrapped five times, due to their lengthy run time.  Both model types have used a block size of 24 for the purpose of block resampling as per the Professors hint. 
+
+
+\section{Exploratory Data Analysis}
+
+```{r Exploratory Data Analysis, echo = FALSE, message = FALSE, warning = FALSE}
+
+
+#Finding interesting correlations
+corr<-function(i, j, df){
+  return(cor(df[,i], df[,j]))
+}
+
+interesting.corr <- function(df, col){
+  total <- col * col
+  intr.df<- data.frame(I = numeric(total) , J = numeric(total) , Cor = numeric(total))
+  #Counter
+  C <- 1
+  #Fill data frame with useful correlations
+  for(i in 1:col){
+    for(j in 1:col){
+      if(i != j && !is.na(corr(i, j, df))){
+        intr.df[C,"I"] <- colnames(df)[i]
+        intr.df[C,"J"] <- colnames(df)[j]
+        intr.df[C,"Cor"] <- corr(i,j, df)
+        C <- C + 1
+      }
+      
+    }
+  }
+  intr.df <- intr.df[(intr.df$I < intr.df$J),]
+  return(intr.df)
+}
+
+
+#Need to remove NA's to get all correlations
+corr.df <- interesting.corr(na.omit(macro[,2:6]), 5) 
+
+kable(corr.df, format = "latex") 
+
+plot(macro$GDP, main = "GDP", ylab = "GDP", xlab = "Time")
+
+```
+
+\paragraph{Correlations}
+Before we began our modeling, we did some brief exploratory data analysis, paying special attention to the correlations between the variables.  `GDP` and `Consumption` had the largest positive correlation at $`r corr.df[4,3]`$, while `Hours` and `Productivity` had the largest negative correlation at $`r corr.df[10,3]`$. ` Investment` and `Productivity` had the smallest absolute correlation at $`r corr.df[8,3]`$.  Due to the high correlations between `Consumption` and `Investment` and `Hours` and `Investment`, we will be testing models with those interaction terms.
+
+\paragraph{Graph of GDP}
+Above, we see `GDP` plotted over time.  There is an unsteady rise in GDP till ~2005, where GDP rapidly falls lower than its original levels.  We believe the fall in GDP is associated with The "Great Recession," a period associated with steady decline in the late 2000's.  While the Great Recession traditional start date is 2007, we speculate that some of our variables may have indicated decline prior to the official recession.
+
+
+\section{Initial Modeling of GDP}
+
+```{r Modeling of GDP, echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE, results = "hide"}
+
+#Subset of data till 2005
+macro.2005 <- macro[1:which(macro$X == "2005-09-30"), ]
+
+gdp.b.mse <- data.frame(None = numeric(1), 
+                         CI = numeric(1), 
+                         HI = numeric(1), 
+                         Both = numeric(1), 
+                         GAM = numeric(1), 
+                         Kernel = numeric(1))
+
+gdp.b.mse[1,1] <- signif(mse.bootstrap(1000, macro.2005, lm, 
+                              "GDP ~ 
+                              Consumption + 
+                              Investment + 
+                              Hours + 
+                              Productivity", 25), 5)
+
+gdp.b.mse[1,2] <- signif(mse.bootstrap(1000, macro.2005, lm, 
+                              "GDP ~ 
+                              Consumption + 
+                              Investment + 
+                              Hours + 
+                              Productivity + 
+                              (Consumption * Investment)", 25), 5)
+
+gdp.b.mse[1,3] <- signif(mse.bootstrap(1000, macro.2005, lm, 
+                              "GDP ~ 
+                              Consumption + 
+                              Investment + 
+                              Hours + 
+                              Productivity + 
+                              (Hours * Investment)", 25), 5)
+
+gdp.b.mse[1,4] <- signif(mse.bootstrap(1000, macro.2005, lm, 
+                              "GDP ~ 
+                              Consumption + 
+                              Investment + 
+                              Hours + 
+                              Productivity + 
+                              (Consumption * Investment) + 
+                              (Hours * Investment)", 25), 5)
+
+gdp.b.mse[1,5] <- signif(mse.bootstrap(1000, macro.2005, gam, 
+                              "GDP ~ 
+                              s(Consumption) + 
+                              s(Investment) + 
+                              s(Hours) + 
+                              s(Productivity)", 25), 5)
+
+gdp.b.mse[1,6] <- signif(mse.bootstrap(5, macro.2005, npreg,
+                                        "GDP ~
+                                        Consumption +
+                                        Investment + 
+                                        Hours +
+                                        Productivity", 25), 5)
+
+```
+
+```{r Table of GDP MSE, echo = FALSE, warning = FALSE, message = FALSE}
+
+kable(gdp.b.mse, format = "latex")
+
+```
+
+\paragraph{Choosing a GDP Model}
+After our brief exploration of the data, we began modeling `GDP` through 2005 using our other variables.  The table above shows the bootstrapped mean squared errors of six models we tested; four linear models, a generalized additive model, and a kernel.  Of our linear models, the model with both interaction terms faired the best. However, both the generalized additive model and the kernel faired considerably better.  Since there is only a small difference in mean squared errors between the generalized additive model and the kernel, we have chosen the generalized additive model as our model of choice for this problem; its summary and partial response functions can be seen below.
+
+```{r Comparing GDP models, echo = FALSE, warning = FALSE, message = FALSE, results = "hide"}
+
+#Comparing Models
+gdp.lm <- lm(GDP ~ 
+               (Consumption) + 
+               (Investment) + 
+               (Hours) + 
+               (Productivity) + 
+               (Consumption * Investment) + 
+               (Hours * Investment), 
+             data = macro.2005)
+
+gdp.gam <- gam(GDP ~ 
+                 s(Consumption) + 
+                 s(Investment) + 
+                 s(Hours) + 
+                 s(Productivity), 
+               data = macro.2005)
+
+gdp.kernel <- npreg(GDP ~ 
+                      Consumption + 
+                      Investment + 
+                      Hours + 
+                      Productivity, 
+                    data = macro.2005, 
+                    tol=1e-3, ftol=1e-4)
+
+```
+
+```{r Summary of GDP GAM, echo = FALSE, message = FALSE, warning = FALSE}
+
+#Summary of the models
+kable(data.frame((summary.gam(gdp.gam, signif.stars = FALSE))["s.table"]))
+
+#Partial Response Graphs
+par(mfrow = c(2,2))
+plot(gdp.gam,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+
+```
+
+\paragraph{Summary of Chosen Model}
+The summary and partial response functions of our chosen model, the generalized additive model, can be seen above.  From the summary and the partial response functions, we see that`Consumption` and `Productivity` both appear to have significant positive relationships with `GDP`, while `Investment` and `Hours` show weaker relationships and larger p-values (`Hours` is not significant).  While it was recommended that we predict on the post-2005 data using our chosen model, due to the marginal differences between the mean squared errors, we have predicted on three models, the results can be seen below.  
+
+```{r Predicting GDP model, echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE,  results = "hide"}
+
+#Predicting new data
+#Great Recession data
+rec.years <- (which(macro$X == "2005-12-31") + 1):nrow(macro)
+
+#GDP predictors
+gdp.pred.mse <- data.frame(LM = numeric(1), 
+                           GAM = numeric(1), 
+                           Kernel = numeric(1))
+
+#LM predictions
+gdp.pred.mse[1,1] <- signif(
+                      pred.bootstrap(
+                          1000, 
+                          macro.2005, 
+                          macro[rec.years,], 
+                          lm, 
+                          "GDP ~ 
+                             (Consumption) + 
+                             (Investment) + 
+                             (Hours) + 
+                             (Productivity) + 
+                             (Consumption * Investment) + 
+                             (Hours * Investment)", 
+                          25, 
+                          "GDP"),5)
+
+#GAM predictions
+gdp.pred.mse[1,2] <- signif(
+                      pred.bootstrap(
+                          1000, 
+                          macro.2005, 
+                          macro[rec.years,], 
+                          gam, 
+                          "GDP ~ 
+                             s(Consumption) + 
+                             s(Investment) + 
+                             s(Hours) + 
+                             s(Productivity)", 
+                          25, 
+                          "GDP"),5)
+
+#Kernel model predictions
+gdp.pred.mse[1,3] <- signif(
+                      pred.bootstrap(
+                          5, 
+                          macro.2005, 
+                          macro[rec.years,], 
+                          npreg, 
+                          "GDP ~ 
+                             (Consumption) + 
+                             (Investment) + 
+                             (Hours) + 
+                             (Productivity)", 
+                          25, 
+                          "GDP"),5)
+
+```
+
+```{r Table of GDP PRED MSE ,echo = FALSE, warning = FALSE, message = FALSE}
+
+kable(gdp.pred.mse, format = "latex")
+
+```
+
+\paragraph{Model Predictions}
+As mentioned in the paragraph above, we predicted on the post-2005 data for three models: the best of our linear models, our generalized additive model, and our kernel.  The bootstrapped mean squared errors can be seen in the table above.  What's most striking about these results, is the predicting power of the linear model.  While it had performed worse on the pre-2005 data, it had the smallest mean squared error in predicting the post-2005 data.  We speculate, the drastic change brought by the recession was best weathered by the relative simplicity of the linear model while the more complicated models suffered due to the sudden change.
+
+\section{GDP Model $t - $ Without Productivity}
+
+```{r Model of GDP t - 1 noPro, echo = FALSE, warning= FALSE, message = FALSE, cache = TRUE,  results = "hide"}
+
+#lagged data
+macro.lag <- data.frame(apply(macro, 2, design.matrix.from.ts, 1, right.older = FALSE)) 
+macro.lag <- data.frame(cbind(macro.lag[,c(1:2)], 
+                              apply(macro.lag[,c(3:12)], 2, 
+                                    function(x) as.numeric(as.character(x)))))
+#2005 data
+macro.2005.lag <- macro.lag[1:which(macro.lag$X.lag1 == "2005-09-30"), ]
+
+t1.noPro.b.mse <- data.frame(None = numeric(1), 
+                               CI = numeric(1), 
+                               HI = numeric(1), 
+                               Both = numeric(1),
+                               GAM = numeric(1), 
+                               Kernel = numeric(1))
+
+
+
+t1.noPro.b.mse[1,1] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0", 25), 5)
+
+t1.noPro.b.mse[1,2] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              (Consumption.lag0 * Investment.lag0)", 25), 5)
+
+t1.noPro.b.mse[1,3] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+t1.noPro.b.mse[1,4] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              (Consumption.lag0 * Investment.lag0) + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+t1.noPro.b.mse[1,5] <- signif(mse.bootstrap(1000, macro.2005.lag, gam, 
+                              "GDP.lag1 ~ s(GDP.lag0) + 
+                              s(Consumption.lag0) + 
+                              s(Investment.lag0) + 
+                              s(Hours.lag0)", 25), 5)
+
+t1.noPro.b.mse[1,6] <- signif(mse.bootstrap(5, macro.2005.lag, npreg, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0", 25), 5)
+
+```
+
+```{r Table of T -1 noPro MSE ,echo = FALSE, warning = FALSE, message = FALSE}
+
+kable(t1.noPro.b.mse, format = "latex")
+
+
+```
+
+\paragraph{Choosing a $t -1 $ Model}
+Since our five variables are time series variables, we re-ran our models of GDP at time $t$ as a predictor of all variables excluding Productivity at time $t - 1$.  The bootstrapped mean squared errors are on the table above.  The linear model with the interaction term between `Consumption` and `Investment` was the best linear model and was marginally better than the generalized additive model and the kernel.  Like our last section, we chose to report and summarize the generalized additive model due to its flexibility and ease of use and understanding.  Since the three models had negligible differences between mean squared errors, we will predict the post-2005 data for all three.  
+
+
+```{r Summarizing Models, warning = FALSE, message = FALSE, echo = FALSE,  results = "hide"}
+
+#Comparing Models
+t1.noPro.lm <- lm(GDP.lag1 ~ GDP.lag0 + 
+                    (Consumption.lag0) + 
+                    (Investment.lag0) + 
+                    (Hours.lag0) +
+                    (Consumption.lag0 * Investment.lag0), 
+                  data = macro.2005.lag)
+
+t1.noPro.gam <- gam(GDP.lag1 ~ s(GDP.lag0) + 
+                      s(Consumption.lag0) + 
+                      s(Investment.lag0) + 
+                      s(Hours.lag0), 
+                    data = macro.2005.lag) 
+
+t1.noPro.kernel <- npreg(GDP.lag1 ~ GDP.lag0 + 
+                           Consumption.lag0 + 
+                           Investment.lag0 + 
+                           Hours.lag0, 
+                           data = macro.2005.lag, 
+                          tol=1e-3, ftol=1e-4)
+
+```
+
+```{r Summary of t-1 noPro, echo = FALSE, message = FALSE, warning = FALSE}
+
+
+#Summary of the models
+kable(data.frame((summary.gam(t1.noPro.gam, signif.stars = FALSE))["s.table"]))
+
+#Partial Response Graphs
+par(mfrow = c(2,2))
+plot(t1.noPro.gam,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+
+
+```
+
+\paragraph{Summary of Chosen Model}
+Above is the summary and the partial response functions of our generalized additive model.  Our partial response functions indicate that there is a strong linear, significant relationship with `GDP` at $t - 1$, which is understandable as we are predicting `GDP` from `GDP`.  There is a slightly negative significant relationship with `Investment` and strongly neutral insignificant relationships with `Consumption and `Hours`.
+
+\paragraph{Comparison of Partial Response Function}
+Comparing the two chosen models leads to some interesting speculation.  In our second model, `Consumption` is no longer a significant predictor and `Investment` is not a negative predictor.  Since there are some large differences between the two models, we can only offer speculation as to why the power of the predictors has changed.  Since `GDP` encompasses `Consumption` and `Investment` the change in significance may result from the its inclusion.  We will not speculate on the removal of `Productivity` until  after we have done separate testing on it.
+
+
+```{r t1 Predictions, echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE,  results = "hide"}
+
+#Predicting new data
+
+#Lagged Recession years
+lag.rec.years<- (which(macro.lag$X.lag1 == "2005-09-30") + 1):nrow(macro.lag)
+
+#GDP predictors
+t1.noPro.pred.mse <- data.frame(LM = numeric(1), 
+                                GAM = numeric(1), 
+                                Kernel = numeric(1))
+
+#linear model predictions
+t1.noPro.pred.mse[1,1] <- signif(
+                      pred.bootstrap(
+                          1, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          lm, 
+                          "GDP.lag1 ~ 
+                             (GDP.lag0) +
+                             (Consumption.lag0) + 
+                             (Investment.lag0) + 
+                             (Hours.lag0) + 
+                             (Consumption.lag0 * Investment.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+#Gam predictions
+t1.noPro.pred.mse[1,2] <- signif(
+                      pred.bootstrap(
+                          1000, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          gam, 
+                          "GDP.lag1 ~ 
+                             s(GDP.lag0) +
+                             s(Consumption.lag0) + 
+                             s(Investment.lag0) + 
+                             s(Hours.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+#Kernel model predictions
+t1.noPro.pred.mse[1,3] <- signif(
+                      pred.bootstrap(
+                          5, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          npreg, 
+                          "GDP.lag1 ~ 
+                             (GDP.lag0) +
+                             (Consumption.lag0) + 
+                             (Investment.lag0) + 
+                             (Hours.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+```
+
+```{r Table T - 1 noPro Pred MSE, echo = FALSE, warning = FALSE, message = FALSE}
+
+kable(t1.noPro.pred.mse, format = "latex")
+
+```
+
+\paragraph{Model Predictions}
+The table above shows the mean squared errors of our three chosen models predictions of the post-2005 data.  The linear model was far and ahead the top model at predicting the post-2005 data.  We continue to speculate that the simplicity of the linear models allow it to predict better than the more computationally intensive models.
+
+
+\paragraph{Comparison between Chosen Model 1 and Chosen Model 2}
+Having compared the partial response function above, we sought to compare between the performances of our chosen and not chosen models.  Our parametric models performed better on the pre-2005 data and on predicting the post-2005 data with the time series model while our kernel performed better with the original model.  In the next section, we will test a similar model with the addition of `Productivity` in the hopes of finding a better model of predicting `GDP`.
+
+\section{GDP Model at $t- 1$ with Productivity}
+
+```{r t - 1 model comparison, echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE,  results = "hide"}
+
+t1.b.mse <- data.frame(None = numeric(1), CI = numeric(1), HI = numeric(1), 
+                         Both = numeric(1), GAM = numeric(1), Kernel = numeric(1))
+
+t1.b.mse[1,1] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 +
+                              Productivity.lag0", 25), 5)
+
+t1.b.mse[1,2] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              Productivity.lag0 +
+                              (Consumption.lag0 * Investment.lag0)", 25), 5)
+
+t1.b.mse[1,3] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              Productivity.lag0 + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+t1.b.mse[1,4] <- signif(mse.bootstrap(1000, macro.2005.lag, lm, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              Productivity.lag0 +
+                              (Consumption.lag0 * Investment.lag0) + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+t1.b.mse[1,5] <- signif(mse.bootstrap(1000, macro.2005.lag, gam, 
+                              "GDP.lag1 ~ s(GDP.lag0) + 
+                              s(Consumption.lag0) + 
+                              s(Investment.lag0) + 
+                              s(Hours.lag0) + 
+                              s(Productivity.lag0)", 25), 5)
+
+t1.b.mse[1,6] <- signif(mse.bootstrap(5, macro.2005.lag, npreg, 
+                              "GDP.lag1 ~ GDP.lag0 + 
+                              Consumption.lag0 + 
+                              Investment.lag0 + 
+                              Hours.lag0 + 
+                              Productivity.lag0", 25), 5)
+
+```
+
+```{r Table T MSE, echo = FALSE, message = FALSE, warning = FALSE}
+
+kable(t1.b.mse, format = "latex")
+
+```
+
+\paragraph{Choosing a Model}
+The summary of mean squared errors above are of our previous models with the inclusion of `Productivity` at time $t - 1$. The linear model with both interaction terms performed better than the other linear models while the generalized additive model and kernel performed better than the linear models.  The mean squared errors of the three models were very close so we we predicted the post-2005 data on all three, but only summarized the generalized additive model as it was the best of the parametric models and would allow for easy comparison between the two previously chosen models.  
+
+```{r t - 1 model summary, echo = FALSE, message = FALSE, warning = FALSE,  results = "hide"}
+
+#Linear Model
+t1.lm <- lm(GDP.lag1 ~ 
+                  (GDP.lag0) + 
+                  (Consumption.lag0) + 
+                  (Investment.lag0) + 
+                  (Hours.lag0) + 
+                  (Productivity.lag0) +
+                  (Consumption.lag0 * Investment.lag0) + 
+                  (Hours.lag0 * Investment.lag0), 
+                  data = macro.2005.lag)
+
+#GAM
+t1.gam <- gam(GDP.lag1 ~ 
+                    s(GDP.lag0) + 
+                    s(Consumption.lag0) + 
+                    s(Investment.lag0) + 
+                    s(Hours.lag0) +
+                    s(Productivity.lag0), 
+                  data = macro.2005.lag)
+
+#Kernel
+t1.kernel <- npreg(GDP.lag1 ~ GDP.lag0 + 
+                     Consumption.lag0 + 
+                     Investment.lag0 + 
+                     Hours.lag0 +
+                     Productivity.lag0, 
+                     data = macro.2005.lag, 
+                     tol=1e-3, ftol=1e-4)
+
+```
+
+```{r Summary of t - 1, echo = FALSE, warning = FALSE, message = FALSE}
+
+#GAM summary
+kable(data.frame((summary.gam(t1.gam, signif.stars = FALSE))["s.table"]))
+
+par(mfrow = c(2,2))
+plot(t1.gam,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+
+```
+
+\paragraph{Summary of Chosen Model}
+The addition of `Productivity` did not dramatically change the partial response functions nor the significance of our variables. ` GDP` at $t - 1$ was still understandably a positive, significant predictor, `Investment` was still a slightly negative significant predictor and `Consumption` and `Hours` were neither significant nor positive or negative.  Our new variable, `Productivity` was significant and appears neither negative nor positive, but is less variable as the values grow.  The addition of `Productivity` did not drastically change the partial response functions or the summary statistics, possibly indicating that while significant it does not add much to the model.
+
+```{r t - 1 predictions, echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE,  results = "hide"}
+
+#GDP predictors
+t1.pred.mse <- data.frame(LM = numeric(1), 
+                                GAM = numeric(1), 
+                                Kernel = numeric(1))
+
+#linear model predictions
+t1.pred.mse[1,1] <- signif(
+                      pred.bootstrap(
+                          1000, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          lm, 
+                          "GDP.lag1 ~ 
+                             (GDP.lag0) +
+                             (Consumption.lag0) + 
+                             (Investment.lag0) + 
+                             (Hours.lag0) + 
+                             (Productivity.lag0) +
+                             (Consumption.lag0 * Investment.lag0) + 
+                             (Hours.lag0 * Investment.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+#Gam predictions
+t1.pred.mse[1,2] <- signif(
+                      pred.bootstrap(
+                          1000, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          gam, 
+                          "GDP.lag1 ~ 
+                             s(GDP.lag0) +
+                             s(Consumption.lag0) + 
+                             s(Investment.lag0) + 
+                             s(Hours.lag0) +
+                             s(Productivity.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+#Kernel model predictions
+t1.pred.mse[1,3] <- signif(
+                      pred.bootstrap(
+                          5, 
+                          macro.2005.lag, 
+                          macro.lag[lag.rec.years,], 
+                          npreg, 
+                          "GDP.lag1 ~ 
+                             (GDP.lag0) +
+                             (Consumption.lag0) + 
+                             (Investment.lag0) + 
+                             (Hours.lag0) +
+                             (Productivity.lag0)", 
+                          25, 
+                          "GDP.lag1"),5)
+
+```
+
+```{r Table T pred MSE, echo = FALSE, message = FALSE, warning = FALSE}
+
+kable(t1.pred.mse, format = "latex")
+
+```
+
+\paragraph{Model Predictions}
+Like our two previous set of predictions, the linear model outperformed the generalized additive model and the kernel.  However, the difference between the mean squared error in this set of predictions, and the previous set is much smaller, possibly hinting at the role `Productivity` plays in the dataset.
+
+\paragraph{Comparison Between Chosen Models 1,2 and 3}
+We chose to compare the top performing linear model, generalized additive model, and kernel from each of our three sets of models.  While the `Productivity` models outperformed the non-`Productivity` models on the pre-2005 data, only the generalized additive model and the kernel beat their pair on the post-2005 data.  Of all of our models, our original kernel model was the top performer on the pre-2005 data, while our non-`Productivity` model was the top performer on the post-2005 data.  The three models we chose, the generalized additive models were second best at predicting both pre and post-2005 data which meant smaller tradeoffs versus the linear models and the kernels.  
+
+\paragraph{Role of Productivity}
+Our results do not demonstrate any specific role that `Productivity` plays as in our chosen models, the inclusion versus exclusion of `Productivity` produced results of $`r ceiling(t1.noPro.b.mse$GAM/t1.b.mse$GAM)`$% and $`r ceiling(t1.noPro.pred.mse$GAM/t1.pred.mse$GAM)`$% for the pre and post-2005 data respectably.  In the next few sections, we will further investigate the role of `Productivity` in driving `GDP`.
+
+\section{Additive Regressions}
+
+```{r Additive Regressions, echo = FALSE, message = FALSE, warning = FALSE}
+
+#additive regressions looking at Productivity
+
+gdp.t1.gam <- gam(GDP.lag1 ~
+                    s(GDP.lag0) + 
+                    s(Consumption.lag0) +
+                    s(Investment.lag0) +
+                    s(Hours.lag0) +
+                    s(Productivity.lag0),
+                  data = macro.lag)
+
+con.t1.gam <- gam(Consumption.lag1 ~
+                    s(GDP.lag0) + 
+                    s(Consumption.lag0) +
+                    s(Investment.lag0) +
+                    s(Hours.lag0) +
+                    s(Productivity.lag0),
+                  data = macro.lag)
+
+inv.t1.gam <- gam(Investment.lag1 ~
+                    s(GDP.lag0) + 
+                    s(Consumption.lag0) +
+                    s(Investment.lag0) +
+                    s(Hours.lag0) +
+                    s(Productivity.lag0),
+                  data = macro.lag)
+
+hou.t1.gam <- gam(Hours.lag1 ~
+                    s(GDP.lag0) + 
+                    s(Consumption.lag0) +
+                    s(Investment.lag0) +
+                    s(Hours.lag0) +
+                    s(Productivity.lag0),
+                  data = macro.lag)
+
+par(mfrow = c(2,2))
+plot.gam(gdp.t1.gam, select = 5)
+plot.gam(con.t1.gam, select = 5)
+plot.gam(inv.t1.gam, select = 5)
+plot.gam(hou.t1.gam, select = 5)
+
+
+gdp.t1.p <- (data.frame((summary.gam(gdp.t1.gam, signif.stars = FALSE))["s.table"]))[5,]
+con.t1.p <- (data.frame((summary.gam(con.t1.gam, signif.stars = FALSE))["s.table"]))[5,]
+inv.t1.p <- (data.frame((summary.gam(inv.t1.gam, signif.stars = FALSE))["s.table"]))[5,]
+hou.t1.p <- (data.frame((summary.gam(hou.t1.gam, signif.stars = FALSE))["s.table"]))[5,]
+
+pro.p <- (rbind(gdp.t1.p, con.t1.p, inv.t1.p, hou.t1.p))
+rownames(pro.p) <- c("GDP", "Consumption", "Investment", "Hours")
+
+kable(pro.p, format = "latex")
+
+```
+
+\paragraph{Effect of Productivity}
+Above are the partial response functions and p-values of Productivity of the other four variables.  All four functions have a hump around -$0.05$ which is most pronounced in the partial response function for `Investment`.  Of the p-values, `Productivity` is a significant predictor for three of the four variables, all except `Hours`.  We speculate that the insignificance of `Productivity` on `Hours` relate to its high negative correlation, $`r signif(cor(macro$Productivity, macro$Hours), 2)`$.  These results partly back up the theory that `Productivity` is an exogenous variable that drives the other variables as `Productivity` is a significant predictor of three of four of them, however the partial response functions do not indicate much to back up or detract from the theory.
+
+\section{Model of Productivity}
+
+```{r Productivity Model, echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE,  results = "hide"}
+
+pro.b.mse <- data.frame(LM = numeric(1), GAM = numeric(1), Kernel = numeric(1))
+
+pro.b.mse$LM <- mse.bootstrap(1000, macro.lag[,c(11:12)], lm, 
+                               "Productivity.lag1 ~ Productivity.lag0", 25)
+pro.b.mse$GAM <- mse.bootstrap(1000, macro.lag[,c(11:12)], gam, 
+                                "Productivity.lag1 ~ Productivity.lag0", 25)
+pro.b.mse$Kernel <- mse.bootstrap(5, macro.lag[,c(11:12)], npreg, 
+                                   "Productivity.lag1 ~ Productivity.lag0", 25)
+
+```
+
+```{r Table Pro, echo = FALSE, message = FALSE, warning = FALSE}
+
+kable(pro.b.mse, format = "latex")
+
+```
+
+\paragraph{Comparison of Models}
+Above is a table of bootstrapped mean squared errors of the first-order autoregressive processes.  We tested three different models, a linear model without interactions, a generalized additive model, and a kernel.  All three models reported mean squared errors within 2% of each other, so we chose what we thought the best first-order autoregressive model was based on attributes of model type.  In keeping with the theme of this report, we used a generalized additive model, due to the generalized additive model's flexibility, use of parameters and ease of use and understanding.  After identifying the best first-order autoregressive model, we have tested and summarized other models of `Productivity`.
+
+\section{Advanced Productivity Models}
+
+```{r Full Productivity Model, echo = FALSE, message = FALSE, warning = FALSE, cache = TRUE,  results = "hide"} 
+
+pro.full.b.mse <- data.frame(None = numeric(1), 
+                         CI = numeric(1), 
+                         HI = numeric(1), 
+                         Both = numeric(1), 
+                         GAM = numeric(1), 
+                         Kernel = numeric(1))
+
+pro.full.b.mse[1,1] <- signif(mse.bootstrap(1000, macro.lag, lm, 
+                               "Productivity.lag1 ~ 
+                               GDP.lag0 +
+                               Consumption.lag0 +
+                               Investment.lag0 +
+                               Hours.lag0+ 
+                               Productivity.lag0", 25), 5)
+
+pro.full.b.mse[1,2] <- signif(mse.bootstrap(1000, macro.lag, lm, 
+                              "Productivity.lag1 ~ 
+                               GDP.lag0 +
+                               Consumption.lag0 +
+                               Investment.lag0 +
+                               Hours.lag0+ 
+                               Productivity.lag0 +
+                              (Consumption.lag0 * Investment.lag0)", 25), 5)
+
+pro.full.b.mse[1,3] <- signif(mse.bootstrap(1000, macro.lag, lm, 
+                               "Productivity.lag1 ~ 
+                               GDP.lag0 +
+                               Consumption.lag0 +
+                               Investment.lag0 +
+                               Hours.lag0+ 
+                               Productivity.lag0 + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+pro.full.b.mse[1,4] <- signif(mse.bootstrap(1000, macro.lag, lm, 
+                              "Productivity.lag1 ~ 
+                               GDP.lag0 +
+                               Consumption.lag0 +
+                               Investment.lag0 +
+                               Hours.lag0+ 
+                               Productivity.lag0 + 
+                              (Consumption.lag0 * Investment.lag0) + 
+                              (Hours.lag0 * Investment.lag0)", 25), 5)
+
+pro.full.b.mse$GAM <- mse.bootstrap(1000, macro.lag, gam, 
+                               "Productivity.lag1 ~ 
+                               s(GDP.lag0) +
+                               s(Consumption.lag0) +
+                               s(Investment.lag0) +
+                               s(Hours.lag0) + 
+                               s(Productivity.lag0)", 25)
+
+pro.full.b.mse$Kernel <- mse.bootstrap(5, macro.lag, npreg, 
+                               "Productivity.lag1 ~ 
+                               GDP.lag0 +
+                               Consumption.lag0 +
+                               Investment.lag0 +
+                               Hours.lag0+ 
+                               Productivity.lag0", 25)
+
+```
+
+```{r Table Pro Full Model, echo = FALSE, warning = FALSE, message = FALSE}
+
+kable(pro.full.b.mse, format = "latex")
+
+```
+
+\paragraph{Comparison of Models}
+In predicting `Productivity`, we tested four linear models, a generalized additive model, and a kernel.  The kernel had the best bootstrapped mean squared error, $`r pro.full.b.mse$Kernel`$, however, we chose to use our generalized additive model for ease of comparison between it and the previous model.
+
+```{r Productivity Inference, echo = FALSE, message = FALSE, warning = FALSE}
+
+pro.full.gam <- gam(Productivity.lag1 ~ 
+                               s(GDP.lag0) +
+                               s(Consumption.lag0) +
+                               s(Investment.lag0) +
+                               s(Hours.lag0) + 
+                               s(Productivity.lag0), data = macro.lag)
+
+#GAM summary
+kable(data.frame((summary.gam(pro.full.gam, signif.stars = FALSE))["s.table"]))
+
+par(mfrow = c(2,2))
+plot(pro.full.gam,pages=1,residuals=TRUE,all.terms=TRUE,shade=TRUE,shade.col=2)
+
+
+```
+
+\paragraph{Summary of  Chosen Model}
+Above is the summary and partial response functions of our chosen model, the generalized additive model.  Our summary indicated that all of the variables, except for `Consumption` are significant predictors.  The partial response functions suggest that `GDP`, `Consumption` and `Investment` do not have strong linear relationships with `Productivity` at time $t$.  Our partial response functions show `Hours` having a strong negative linear relationship with `Productivity` which is backed by the correlation, but interesting as the model where `Hours` was the response did not show the same relationship.  `Productivity` at time $t - 1$ has a strong linear relationship with `Productivity at time $t$ for obvious reasons.
+
+\paragraph{Comparison of First-order Autoregressive and Productivity Models}
+Based on our choice of models, the two generalized additive models, the model with the other variables outperforms the first-order autoregressive model by about $`r ceiling(pro.b.mse$GAM/pro.full.b.mse$GAM)`$%.  Since the difference between the two models is so marginal, we are hesitant to suggest that `Productivity` is an exogenous variable.  If anything, since the model with other variable outperformed the first-order autoregressive model, `Productivity` may be an endogenous model.  
+
+\section{Conclusion}
+
+\paragraph{Proposition}
+The researchers who's dataset we have used and who's questions we have sought to answer have proposed that "Exogenous changed in `Productivity` are the main driver of the macroeconomic fluctuations.".  Due to the results we have in the paper below, we feel without further evidence to the contrary; we must reject the researchers proposition.  Our first-time series models showed little difference between models that included `Productivity` and models that did not.  When we observed the partial response functions of four additive models, we did see `Productivity` as significant. However, we did not see trends in the functions.  Lastly, the final models we tested, those of `Productivity` showed little difference between those predicted by all variables and those predicted by `Productivity` alone.  Due to this evidence, we feel that we have demonstrated that `Productivity` is not an exogenous variable in our dataset and thus not the main driver in macroeconomic fluctuations.  
+
+
+
+

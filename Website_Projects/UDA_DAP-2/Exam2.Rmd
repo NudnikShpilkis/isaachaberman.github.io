@@ -1,0 +1,411 @@
+---
+title: "Exam 2"
+author: "Isaac Haberman"
+date: "April 18, 2016"
+output: pdf_document
+---
+
+```{r Libraries and Data, warning = FALSE, message = FALSE, echo = FALSE}
+
+library(ggplot2)
+library(knitr)
+library(poLCA)
+library(mgcv)
+
+partisan <- read.csv("http://www.stat.cmu.edu//~cshalizi//uADA/16//exams//2//paristan.csv")
+partisan[,2:ncol(partisan)] <- partisan[,2:ncol(partisan)] + 1 
+
+#Finding interesting correlations
+corr<-function(i, j, df){
+  return(cor(df[,i], df[,j]))
+}
+
+interesting.corr <- function(df, col){
+  total <- col * col
+  intr.df<- data.frame(I = numeric(total) , J = numeric(total) , Cor = numeric(total))
+  #Counter
+  C <- 1
+  #Fill data frame with useful correlations
+  for(i in 1:col){
+    for(j in 1:col){
+      if(i != j && !is.na(corr(i, j, df))){
+        intr.df[C,"I"] <- i
+        intr.df[C,"J"] <- j
+        intr.df[C,"Cor"] <- corr(i,j, df)
+        C <- C + 1
+      }
+    }
+  }
+  intr.df <- intr.df[(intr.df$I < intr.df$J),]
+  return(intr.df)
+}
+
+#Professor Shalizi's code
+#Find fancy ass clustering for mixture models
+dmultbinarymix <- function(x, model, offset=1, log=FALSE) {
+    # Shift x so it's coded 0/1
+    x <- x-offset
+    # Extract the matrix of conditional probabilities (theta)
+    prob.matrix <- sapply(model$probs, function(mat) { mat[,2] })
+    # If we're using one cluster, this will just be a vector, causing trouble
+    # later, so force it to be an array
+    if (is.null(dim(prob.matrix))) {
+        prob.matrix <- array(prob.matrix, dim=c(1,length(prob.matrix)))
+    }
+    # Extract the class probabilities (lambda)
+    class.probs <- model$P
+    # Calculate the contribution to the probability of one data point coming
+    # from one class
+    class.cond.prob <- function(x,c) {
+        class.probs[c]*prod((prob.matrix[c,]^x)*((1-prob.matrix[c,])^(1-x)))
+    }
+    # Calculate the marginal probability of a single data point
+    one.point.prob <- function(x) {
+        summands <- sapply(1:length(class.probs),
+                           class.cond.prob,
+                           x=x)
+        return(sum(summands))
+    }
+    # Calculate the probabilities of all data points
+    probs <- apply(x, 1, one.point.prob)
+    if (log) {
+        return(log(probs))
+    } else {
+        return(probs)
+    }
+}
+
+binarymultmixloglik <- function(data, model, offset=1) {
+    sum(dmultbinarymix(data, model, offset, log=TRUE))
+}
+
+cv.poLCA <- function(data, formula, nclusters, nfolds=5, ...) {
+    # initially assign each row to a fold in cyclic sequence
+    folds <- rep(1:nfolds, length.out=nrow(data))
+    # shuffle the order
+    folds <- sample(folds)
+    # make an empty array to store log-likelihoods
+    logliks <- matrix(NA, nrow=length(nclusters), ncol=nfolds)
+    rownames(logliks) <- nclusters
+    for (fold in 1:nfolds) {
+        fold.members <- which(folds == fold)
+        train <- data[-fold.members,]
+        test <- data[fold.members,]
+        for (k in 1:length(nclusters)) {
+            est <- poLCA(formula=formula, data=train, nclass=nclusters[k], ...)
+            logliks[k, fold] <- binarymultmixloglik(test, model=est)
+        }
+    }
+    cv.logliks <- rowMeans(logliks)
+    return(cv.logliks)
+}
+
+#CV of Models (Professors Code)
+cv.model <- function(data, model, formulae, nfolds=5) {
+  data <- na.omit(data)
+  formulae <- sapply(formulae, as.formula)
+  n <- nrow(data)
+  fold.labels <- sample(rep(1:nfolds, length=n))
+  mses <- matrix(NA, nrow=nfolds, ncol=length(formulae))
+  colnames <- as.character(formulae)
+  for (fold in 1:nfolds) {
+    test.rows <- which(fold.labels == fold)
+    train <- data[-test.rows,]
+    test <- data[test.rows,]
+    for (form in 1:length(formulae)) {
+       current.model <- model(formula=formulae[[form]], data=train)
+       predictions <- predict(current.model, newdata=test)
+       test.responses <- eval(formulae[[form]][[2]], envir=test)
+       test.errors <- test.responses - predictions
+       mses[fold, form] <- mean(test.errors^2)
+    }
+  }
+  return(colMeans(mses))
+}
+
+```
+
+
+\section{Introduction}
+
+\paragraph
+While the fall of the Berlin Wall is the iconic moment of the Fall of Communism, the Communist Bloc had begun to fail in the 1980's, years before the fall of the Berlin Wall.  The newly free countries quickly adopted democracy and capitalism as a replacement for the communist and planned economies that had previously terrorized their countries.  With this change in countries, researchers were interested in the thoughts of the citizens political, historical and human rights views.
+
+\paragraph{}
+We have analyzed the anonymous researchers; dataset `partisan.csv` which is the results of a survey done twice, once in 1998 and once in 2003, in a country which we will refer to as "Partisan."  The researchers theorized that demographics categorized citizens political views which then categorized their views on history and human rights.  To test the theory of the researchers, we clustered the opinions of the citizens using mixture models, tested for predictability and independence between the clusters before concluding.
+
+\section{Attitudes Towards the Past}
+
+```{r Hist Corr, echo = FALSE}
+
+#Correlation stuff
+hist <- na.omit(partisan[,2:6])
+hist.cor <- interesting.corr(hist, 5)
+
+```
+
+\paragraph{}
+To begin our work, we did some exploratory data analysis of each of the variable groupings.  Of the historical era variables, `monarchy` and `feudal` had the highest correlation at `r hist.cor[10,3]`, while the lowest correlation was between `intl.stds` and `socialist` at `r hist.cor[5,3]`.  We speculated the relatively high correlation between `monarchy` and `feudal` was due to their intertwined relationship throughout history, while the low correlation between `intl.stds` and `socialist`is explained by the opposition between democracy and socialism. Interestingly, none of the correlations are negative, meaning all the variables have positive relationships.  Hopefully, the mixture model will shed further light on data.   
+
+```{r Past Mixture, echo = FALSE}
+
+#Test poLCA
+test.hist.mix <- poLCA(cbind(postsocialist, intl.stds, socialist, monarchy, feudal) ~ 1, data = hist, nclass = 2, verbose = FALSE)
+
+#Run Professors Cluster finder
+cv.hist <- cv.poLCA(hist, formula=formula(test.hist.mix), nclusters=1:5, verbose=FALSE)
+#Clusters
+hist.ll <- order(cv.hist, decreasing = TRUE)[1]
+#Final poLCA
+hist.mix <- poLCA(cbind(postsocialist, intl.stds, socialist, monarchy, feudal) ~ 1, data = hist, nclass = hist.ll, verbose = FALSE)
+
+kable(data.frame(t(data.frame(hist.mix$probs))))
+kable(data.frame(t(data.frame(hist.mix$probs.se))))
+
+kable(cbind(data.frame(hist.mix$P), 
+            data.frame(hist.mix$P.se)))
+
+```
+
+\paragraph{}
+We cross-validated loglikelihood's to find the proper number of clusters for our final mixture model of attitudes towards the historical eras.  The resulting number of clusters was `r hist.ll`.  The tables above show the results of our mixture model.  There are clusters, with the second cluster containing the majority of the data, followed by the first and third cluster.   Above the table of classes is the table of probabilities for the different variables of the historical era.      
+
+\subsection{General political Values}
+
+
+```{r polit Corr, echo = FALSE}
+
+#Read comments on hist
+polit <- na.omit(partisan[,7:10])
+polit.cor <- interesting.corr(polit, 4)
+
+```
+
+\paragraph{}
+The second set of variables we analyzed were the political value variables.  `personal.dignity` and `national.dignity` had the highest correlation at `r polit.cor[5,3]`, while `selfdetermination` and `national.dignity` had the lowest correlation at `r polit.cor[6,3]`.  We speculated that the relatively high correlation between `personal.dignity` and `national.dignity`stems from the extension of national dignity from personal dignity.  While the relatively low correlation between `selfdetermination` and `personal.dignity` is explained by national self determination not factoring into personal dignity.  As with the previous table of variables, there are no negative correlations. 
+
+```{r polit Mixture, echo = FALSE}
+
+test.polit.mix <- poLCA(cbind(freedom.oppression, personal.dignity, selfdetermination, national.dignity) ~ 1,
+                            data = polit, nclass = 2, verbose = FALSE)
+cv.polit <- cv.poLCA(polit, formula=formula(test.polit.mix), nclusters=1:5, verbose=FALSE)
+polit.ll <- order(cv.polit, decreasing = TRUE)[1]
+polit.mix <- poLCA(cbind(freedom.oppression, personal.dignity, selfdetermination, national.dignity) ~ 1, 
+                       data = polit, nclass = polit.ll, verbose = FALSE)
+
+kable(data.frame(t(data.frame(polit.mix$probs))))
+kable(data.frame(t(data.frame(polit.mix$probs.se))))
+
+kable(cbind(data.frame(polit.mix$P), 
+            data.frame(polit.mix$P.se)))
+
+```
+
+\paragraph{}
+We cross-validated loglikelihood's to find the proper number of clusters for our final political value mixture model.  Using the functions we used earlier, we chose to use `r polit.ll` clusters.  The tables above shows the probabilities, standard errors of the clusters and the variables.
+
+\subsection{Human Rights}
+
+```{r Human Corr, echo = FALSE}
+
+#Read notes on hist
+human <- na.omit(partisan[,11:22])
+human.cor <- interesting.corr(human, 12)
+
+```
+
+\paragraph{}
+The last set of variables we analyzed were the citizens thoughts on human rights.  `hr.democracy` and `hr.mentioned` had the highest correlation at ` r human.cor[66,3]`, while the lowest correlation was between `hr.natl.respect` and `hr.violated` at `r human.cor[57,3]`.  We conjectured the relatively high correlation between `hr.democracy` and `hr.mentioned` could be explained by the broad terms of mentions and democracy.  The relatively low correlation between `hr.natl.respect` and `hr.violated` can be explained by the apparent lack of similarities between self-determination of an individual and respect for a nation.
+
+```{r Human Mixture, echo = FALSE}
+
+test.human.mix <- poLCA(cbind(hr.personal.dignity, hr.equality, hr.political.freedom, hr.participation, hr.econ.freedom,
+                              hr.socioeconomics, hr.selfdetermination, hr.natl.respect, hr.violated, hr.support, 
+                              hr.democracy, hr.mentioned) ~ 1, data = human, nclass = 2, verbose = FALSE)
+cv.human <- cv.poLCA(human, formula=formula(test.human.mix), nclusters=1:5, verbose=FALSE)
+human.ll <- order(cv.human, decreasing = TRUE)[1]
+human.mix <-  poLCA(cbind(hr.personal.dignity, hr.equality, hr.political.freedom, hr.participation, hr.econ.freedom,
+                              hr.socioeconomics, hr.selfdetermination, hr.natl.respect, hr.violated, hr.support, 
+                              hr.democracy, hr.mentioned) ~ 1, data = human, nclass = human.ll, verbose = FALSE)
+
+kable(data.frame(t(data.frame(human.mix$probs))))
+kable(data.frame(t(data.frame(human.mix$probs.se))))
+
+kable(cbind(data.frame(human.mix$P), 
+            data.frame(human.mix$P.se)))
+
+```
+
+\paragraph{}
+Like the last two sets of variables, we cross-validated loglikelihood's to find the proper number of clusters for our mixture model of human rights, which resulted in `r human.ll` clusters.  The tables above show the probabilities and standard errors of the clusters and variables within the model.
+
+\subsection{Conditional Independence Relations}
+
+```{r Predicting polit demog, warning = FALSE, message = FALSE, echo = FALSE}
+
+#reclassify variables
+demog <- partisan[,23:29]
+demog$location <- factor(demog$location)
+demog$gender <- factor(demog$gender)
+demog$residence <- factor(demog$residence)
+demog$occupation <- factor(demog$occupation)
+demog$ethnicity <- factor(demog$ethnicity)
+demog$age <- factor(demog$age, ordered = TRUE)
+demog$education <- factor(demog$education, ordered = TRUE)
+
+#add clustering to df for easier modeling
+demog$hist.cluster <- hist.mix$predclass- 1
+demog$polit.cluster <- polit.mix$predclass- 1
+demog$human.cluster <- human.mix$predclass- 1
+
+#Remove outliers
+demog <- na.omit(demog)
+
+#Checking predictive powers of demographics
+polit.gam <- gam(polit.cluster ~ location + gender + residence + occupation +
+                 ethnicity + age + education, 
+                 data = demog, family = "binomial")
+
+#Confusion matrix
+polit.pred.prop.gam <- predict(polit.gam, type="response")
+polit.classifier.gam <- ifelse((polit.pred.prop.gam > 0.5), 1, 0)
+polit.confusion.gam <- table(demog$polit.cluster, polit.classifier.gam,
+                       dnn=c("reality", "prediction"))
+
+```
+
+\paragraph{}
+We moved away from the mixture models and began testing for relationships between sets of variables.  Testing the first parent-child relationship of the conjecture, we tested the predictive power of demographic variables on political views.  To do this, we used a generalized additive model of the demographic variables predicting on the clustering of our earlier political view clustering.  While the predictive power was not great at only `r signif(sum(diag(polit.confusion.gam)) / sum(polit.confusion.gam),3)`  it was greater than predicting on the larger of the two clusters.  These results showed a relationship from the conjecture and we, therefore, continued in our testing.
+
+\subsection{Demographic Predicting Membership}
+
+```{r Independence of Membership, echo = FALSE}
+
+#DF of clusters
+partisan$hist <- hist.mix$predclass
+partisan$polit <- polit.mix$predclass
+partisan$human <- human.mix$predclass
+
+temp.partisan <- na.omit(partisan)
+
+clusters <- (temp.partisan[,30:32])
+
+#Split by clustering of 2 for chi square tests
+polit.table1 <- table(clusters[clusters$polit == 1,1], 
+                      clusters[clusters$polit == 1, 3]) 
+polit.table2 <- table(clusters[clusters$polit == 2,1], 
+                      clusters[clusters$polit == 2, 3]) 
+
+p.chi1 <- chisq.test(polit.table1) 
+p.chi2 <- chisq.test(polit.table2) 
+
+```
+
+\paragraph
+After testing the first relationship in the researchers' model, we chose to test the final relationship, human rights, and the historical era.  We created a new data frame containing the clustering of our three mixture models, split the data frame in two, based on the clustering of political values and ran chi-square tests for independence.  The first cluster, the larger of the two, returned a p-value of `r p.chi1$p.value`, indicating dependence of variables.  While the second cluster, the smaller of the two, returned a p-value of `r.pchi2$p.value`, Indicating independence of variables.  Since the majority of the data is dependent, we categorized all the data as dependent.  In other words, given a citizens political values, their historical era values and human rights values are associated.  
+
+\subsection{Independence Given Membership}
+
+```{r Exploring Clustering 1, echo = FALSE, message = FALSE, warning = FALSE}
+
+hist.gam <- gam(list(hist.cluster ~ 
+                       location + gender + residence + occupation + ethnicity +
+                       age + education + polit.cluster,~ location + gender +
+                       residence + occupation + ethnicity + age + education +
+                       polit.cluster), 
+                data = demog, family = multinom(K = hist.ll - 1))
+
+#Confusion matrix
+hist.pred.prop.gam <- predict(hist.gam, type="response")
+hist.classifier.gam <-
+  as.numeric(apply(hist.pred.prop.gam, 1, FUN=function(x){which.max(x)-1}))
+hist.confusion.gam <- 
+  table(demog$hist.cluster, hist.classifier.gam, 
+        dnn = c("reality", "prediction"))
+
+
+```
+
+\paragraph{}
+After testing the ends of the researchers' conjecture, we needed to test the middle relationship, to ensure validity of the theory.  We ran a general additive model predicting historical era values from demographic values and political views.  The resulting accuracy of our model is `r signif(sum(diag(hist.confusion.gam)) / sum(hist.confusion.gam),3)`, which is greater than the accuracy of always choosing from the largest cluster, `r signif(mean(demog$hist.cluster==1, na.rm=TRUE),3)`.  Our model shows that given political values, one can predict historical era values using demographic values, which was the middle relationship in the researchers' theory.  Using the previous section, we know a simialr relationship exists for human rights.
+
+\section{Directed Acyclic Graphs}
+
+\subsection{Directed Acyclic Graph}
+
+![DAG](dag.png)
+
+\paragraph{}
+Above is our graphical interpretation of the researchers conjecture of the data set.  Historical and Human Rights values are caused by the a citizens general political values which are in turn caused by their pre-existing demographic variables.  The graph implies that the estimated cluster memberships used in the previous sections should follow the same conditional independence relations as the actual latent variables.  
+
+\subsection{Other Directed Acyclic Graphs}
+
+\paragraph{}
+The graphical model above is the only graphical model which predicts this pattern of conditional independences among the observed and estimated variables from the researcher' conjecture.  Assuming we follow that aforementioned conjecture, historical and human rights are children nodes of political which is a child of demographics.  There is no room for other causal parents or children from the data set due to the language of the conjecture.
+
+\section{Missing Values}
+
+```{r Missing values, echo = FALSE, warning = FALSE, message = FALSE, cache = TRUE}
+
+missing <- as.numeric(nrow(partisan) - nrow(na.omit(partisan)))
+
+resample <- function(x, bad){ 
+  return(x[-sample(1:nrow(x), bad),])
+} 
+
+resampler.mix <- function(df, bad) {
+  new.data <- resample(df, bad)
+  return(new.data)
+}
+
+#Mixture Model Maker
+mixer <- function(dat){
+  #Df to return
+  new.data <- data.frame(hist = numeric(nrow(dat)), 
+                         polit = numeric(nrow(dat)), 
+                         human =numeric(nrow(dat)))
+  
+  #Mixture models and clusters
+  hist <- poLCA(cbind(postsocialist, intl.stds, socialist, monarchy,
+                               feudal) ~ 1, 
+                         data = dat, nclass = hist.ll, verbose = FALSE)
+  new.data$hist <- hist$predclass
+  
+  polit <-  poLCA(cbind(hr.personal.dignity, hr.equality,
+                            hr.political.freedom, hr.participation,
+                            hr.econ.freedom,hr.socioeconomics,
+                            hr.selfdetermination, hr.natl.respect, hr.violated,
+                            hr.support, hr.democracy, hr.mentioned) ~ 1, 
+                      data = dat, nclass = human.ll, verbose = FALSE)
+
+  new.data$polit <- polit$predclass
+  
+  human <- poLCA(cbind(freedom.oppression, personal.dignity,
+                                selfdetermination, national.dignity) ~ 1,
+                          data = dat, nclass = polit.ll, verbose = FALSE)
+  new.data$human <- human$predclass
+  
+  return(new.data)
+}
+
+#bootstrap for CI's
+mix.bootstrap <- function(B, df, orig, bad) {  
+    
+    boots <- (replicate(B, mixer(resampler.mix(df, bad))))
+    x <- sum(boots[1][[1]] != orig[,"hist"]) + 
+          sum(boots[2][[1]] != orig[,"polit"]) + 
+          sum(boots[3][[1]] != orig[,"human"]) + 1
+    return(x / (B + 1))
+}  
+
+diff <- (mix.bootstrap(1000, partisan, clusters, missing))
+
+```
+
+\paragraph{}
+The previous sections all removed the `r missing` rows of missing values, under the assumption that those rows had no bearing on the theory or statistical work.   By bootstrapping and testing for significance, we received a p-value of `r diff`, which was insignificant under the alpha level of 0.05.  Meaning, the rows removed had no special bearing on the data and could be removed without fear of tampering with the results.
+
+\section{Conclusions}
+
+\paragraph{}
+We tested each relationship of the directed acyclic graph as well as the missing values of the data, set.  We, therefore, felt confident in writing an assessment of the researchers' theory about the causal structure of the data.  We saw from the previous sections, the dependence of political views on demographics, the dependence of political views for human rights and historical era views and the predictive ability of demographic ability on historical era views.  Each of those steps showed parts of the directed acyclic graph that was the researcher's conjectures.  By checking the missing values, we showed that there were not meaningful patterns obscured by missing data points.  Therefore, we feel that the researchers' should be confident in their assessment of the data due to the aforementioned reasons.  
