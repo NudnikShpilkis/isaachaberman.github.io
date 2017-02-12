@@ -3,11 +3,13 @@
 <head>
   <title>Isaac Haberman</title>
   <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-<div class="row container page">
-<nav class="navbar navbar-default navbar-inverse navbar-fixed-top" >
+
+
+<nav class="navbar navbar-default navbar-inverse" >
   <div class="container-fluid">
     <!-- Brand and toggle get grouped for better mobile display -->
     <div class="navbar-header">
@@ -23,7 +25,8 @@
     <!-- Collect the nav links, forms, and other content for toggling -->
     <div class="collapse navbar-collapse navbar-inverse" id="bs-example-navbar-collapse-1">
       <ul class="nav navbar-nav navbar-right">
-        <li><a href="index.html">About</a></li>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About</a></li>
         <li><a href="projects.html">Projects</a></li>
         <li><a href="resume.pdf">Résumé</a></li>
        </ul>
@@ -37,75 +40,96 @@
 <br>
 <br>
 
+<div class="list-group">
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/coup.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>Coups d’état Prediction</h3>
+      <p>Modeling and predicting the onset of coups d’état
+      </p>
+      <p>The code and project is heavily adopted from Jay Ulfelder, who's original work can be found at https://dartthrowingchimp.wordpress.com/</p>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/raw/master/Website_Projects/D%26S_Coup/Policy_memo.docx">Download Paper</a>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/D%26S_Coup/coup_data.R">View Code</a>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/D%26S_Coup/coup_data.R">Download Data</a>
+    </div>
+  </div>
 
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Coups d’état Prediction</h3>
-<p>Through statistical analysis and research, I built a model for predicting the onset of coups d’état.  Using statistical analysis and insight garnered my review of academic papers, I tested a variety of logistic regression models and identified the best model.
-</p>
-<p>The code and project is heavily adopted from Jay Ulfelder, who's original work can be found at https://dartthrowingchimp.wordpress.com/</p>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/raw/master/Website_Projects/D%26S_Coup/Policy_memo.docx">Download Paper</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/D%26S_Coup/coup_data.R">View Code</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/D%26S_Coup/coup_data.R">Download Data</a>
-</div>
-</div>
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/dota.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>Dota Data Analysis</h3>
+      <p>Analyzing data from Defense of the Ancients to predict winning based on gold and experience</p>
+      <a href="https://nbviewer.jupyter.org/github/isaachaberman/Data-Science/blob/master/dota_analysis_5.0.ipynb">View Project</a>
+      <a href="https://1drv.ms/u/s!AmOVXN_ZlKloykaxok2KwCfjHLxn">Download Data Pt1</a>
+      <a href="https://1drv.ms/u/s!AmOVXN_ZlKloyjH08H1gWq_aNs-9">Download Data Pt2</a>
+    </div>
+  </div>
 
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Dota Data Analysis</h3>
-<p>Defense of the Ancients is one of the most popular MOBA's available today.  Using two available data sets, we analyzed DOTA matches with the goal of modeling winning on a given match based on a players gold and experience.</p>
-<a href="https://nbviewer.jupyter.org/github/isaachaberman/Data-Science/blob/master/dota_analysis_5.0.ipynb">View Project</a>
-<a href="https://1drv.ms/u/s!AmOVXN_ZlKloykaxok2KwCfjHLxn">Download Data Pt1</a>
-<a href="https://1drv.ms/u/s!AmOVXN_ZlKloyjH08H1gWq_aNs-9">Download Data Pt2</a>
-</div>
-</div>
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/ggplot.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>ggplot Tutorial</h3>
+      <p>A tutorial for the python package ggplot</p>
+      <a href="https://nbviewer.jupyter.org/url/datasciencecourse.org/tutorial_final/68/ggplot_tutorial.ipynb">View Project</a>
+    </div>
+  </div>
 
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>ggplot Tutorial</h3>
-<p>This tutorial will introduce the reader to the python package ggplot, the python equivalent of Hadley Wickham's immensely popular R package, ggplot2. ggplot2 is a graphics and visualizations package, based on the Grammer of Graphics, in the statistical language, R.</p>
-<a href="https://nbviewer.jupyter.org/url/datasciencecourse.org/tutorial_final/68/ggplot_tutorial.ipynb">View Project</a>
-</div>
-</div>
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/bikes.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>Citi Bike Analysis</h3>
+      <p>Analyzing and predicting the location of Citi Bike placement in New York City</p>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/TDS/tds_code.Rmd">View Code</a>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/TDS/tds_paper.pdf">View Paper</a>
+    </div>
+  </div>
 
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Citi Bike Analysis</h3>
-<p>For the first annual Tartan Data Science Cup, we analyzed data from New York City's bike share program, Citi Bike.  Our subsequent analysis and predcitions for stop placements won third place.</p>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/TDS/tds_code.Rmd">View Code</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/TDS/tds_paper.pdf">View Paper</a>
-</div>
-</div>
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/gdp.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>Business Cycle Analysis</h3>
+      <p>Analyzing the relationship between productivity and the economy to better understand the business cycle
+      </p>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-3/Exam3.Rmd">View Code</a>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-3/Exam3.pdf">View Paper</a>
+    </div>
+  </div>
 
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Business Cycle Analysis</h3>
-<p>I investigated the relationship between productivity and four measures of the economy, GDP, value of goods, investment spending and total hours worked. To this end, I have seven speciﬁc questions that I answered to best understand the business cycle theory. 
-</p>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-3/Exam3.Rmd">View Code</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-3/Exam3.pdf">View Paper</a>
-</div>
-</div>
-
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Causal Opinions Analysis</h3>
-<p>I analyzed the partisan dataset, which contains data on a survey done in a former Soviet bloc country in  1998 and 2003.  The researchers theorized that demographics categorized citizens political views which in turn categorized their views on history and human rights. To test the theory of the researchers, I clustered the opinions of the citizens using mixture models, tested for predictability and independence between the clusters before concluding.
-</p>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-2/Exam2.Rmd">View Code</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-2/Exam2.pdf">View Paper</a>
-</div>
-</div>
-
-<div class="row content container col-sm-10 col-sm-offset-1">
-<div class="jumbotron">
-<h3>Economic Growth Analysis</h3>
-<p>In this report, I analyzed what factors led to economic growth in the pre-Industrial Revolution era, the primitive accumulation. I tested whether countries with access to Atlantic Trade had the greatest economic growth. And whether countries with relatively free institutions grew from greater access to Atlantic Trade and, therefore, greater economic growth in the primitive accumulation.
-</p>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-1/Exam1.Rmd">View Code</a>
-<a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-1/Exam1.pdf">View Paper</a>
-</div>
-</div>
+  <div class="row content container col-sm-10 col-sm-offset-1 blurb list-group-item">
+    <div class="col-xs-6 col-md-3">
+        <a href="#" class="thumbnail">
+          <img src="images/urban.png" class="blurb-thumbnail" alt="...">
+        </a>
+    </div>
+    <div class="media-body">
+      <h3>Economic Growth Analysis</h3>
+      <p>Evaluating economic growth during the Primitive Accumulation
+      </p>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-1/Exam1.Rmd">View Code</a>
+      <a href="https://github.com/isaachaberman/isaachaberman.github.io/blob/master/Website_Projects/UDA_DAP-1/Exam1.pdf">View Paper</a>
+    </div>  
+  </div>
+</div> <!--list-group-->
 
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
 </body>

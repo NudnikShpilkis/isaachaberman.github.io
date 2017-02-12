@@ -1,3 +1,15 @@
 #navbar {
 	
 }
+
+.blurb{
+	background-color: #EEEEEE;
+	display: inline-block;
+    padding: 30px;
+    margin-bottom: 50px;
+}
+
+.blurb-thumbnail{
+	width: 250px;
+}
+
