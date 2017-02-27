@@ -1,12 +1,14 @@
-#navbar {
-	
+h1{
+  text-align: center;
+  margin-bottom: 50px;
+  margin-top: 40px;
 }
 
 .blurb{
 	background-color: #EEEEEE;
 	display: inline-block;
-    padding: 30px;
-    margin-bottom: 50px;
+  padding: 30px;
+  margin-bottom: 50px;
 }
 
 .blurb-thumbnail{
@@ -21,4 +23,43 @@
   top:0;
   left:0;
   z-index: -1;
+}
+
+#footer{
+  clear: both;
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 30px;
+}
+
+.navbar-inverse .navbar-brand, 
+.navbar-inverse .navbar-nav>li>a{
+  color: white;
+}
+
+.navbar-inverse .navbar-brand:hover, 
+.navbar-inverse .navbar-nav>li>a:hover{
+  color: #bbb;
+}
+
+.list-group-item,
+.list-group-item:first-child {
+  border: none;
+  border-radius: 0px;
+  box-shadow: 2px 2px 5px #ccc;
+}
+
+.list-group-item:last-child {
+  margin-bottom: 50px;
+}
+
+.thumbnail {
+  border: none;
+}
+
+@media (min-width: 768px){
+  .navbar {
+    border-radius: 0px;
+
+  }
 }
