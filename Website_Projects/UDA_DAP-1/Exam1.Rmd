@@ -2,7 +2,9 @@
 title: '36-402: Exam 1'
 author: "Isaac Haberman"
 date: "March 1, 2016"
-output: pdf_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r Libraries and Data, echo = FALSE, message = FALSE, warning = FALSE}
@@ -23,17 +25,14 @@ raj <- raj[-c(33:40, 105:112, 121:128, 217:224),1:10]
 
 ```
 
-\section{Introduction}
+#Introduction
 
-\paragraph{}
 Traditionally, economists have categorized modern economic growth with the beginning of the Industrial Revolution in the early 1800's.  In this report, we will analyze what factors that led to economic growth in the pre-Industrial Revolution era, the primitive accumulation.  We theorize that countries with access to Atlantic Trade had the greatest economic growth.  We further theorize, that countries with relatively free institutions grew from greater access to Atlantic Trade and, therefore, greater economic growth in the primitive accumulation.
 
-\paragraph{}
 To test our theory, we will be using RAJ.csv, a data set containing economic and political information on countries during the primitive accumulation.  There are 224 observations of  the 14 variables: country, year, urbanization (fraction of population living in cities and towns) which will serve as our proxy for economic growth, population (thousands), ratio of country's Atlantic coast-line (miles) to total land area (square miles), an increasing rating of constraint of the executive branch (1 - 7), a rating of prior constraint of the executive branch, index of the volume of Atlantic trade across all countries, indicators for countries in Western and Eastern Europe, the number of wars the country engaged in, indicator of a Protestant country, indicator of country belonging to the Holy Roman Empire and the estimate of per-capita GDP in current dollars.  We have removed China, India, Japan and Turkey from the data set as they are missing essential data needed for the report and are non-European countries.
 
-\section{Initial Modeling}
+##Initial Modeling
 
-\paragraph{Introduction}
 Our initial model, `urb.lm`, is a basic linear model with `urbanization` as the response and few of the other variables as predictors.    
 
 ```{r Initial Model, message = FALSE, warning = FALSE}
@@ -44,7 +43,7 @@ urb.lm <- lm(urbanization ~ factor(country) + factor(year) +
 
 ```
 
-\paragraph{Table: Linear Model}
+##Table: Linear Model
 The model's coefficients are summarized below.  Five of the countries have positive coefficients, meaning there would be greater   `urbanization` than if not in that `country`; Albania, Belgium, Italy, Netherlands and Spain.  As time passes, `urbanization` increases as expected. and the interaction between `atlTrade` and `coastToArea` is positive as expected. Interestingly, the coefficients of `WesternEurope` and `initialConstr` were NA, indicating a perfect colinearity with one of the other variables.  Prior knowledge of the European theater tells us that any country with Atlantic Coastline would be a country in Western Europe as Eastern European countries are either not on the Atlantic Seaboard or are landlocked.  We theorize that the collinearity for `initialConstr` might relate to the interaction term present.  Further testing is needed, to investigate these effects.   
 
 ```{r Initial Model Table, echo = FALSE, message = FALSE, warning= FALSE}
@@ -54,12 +53,11 @@ kable(signif(urb.lm.tbl,2),digits=25, format = "latex")
 
 ```
 
-\section{Analysis of Initial Model}
+##Analysis of Initial Model
 
-\paragraph{Introduction}
 We will analyze how `urb.lm` fits the data, looking at outliers, influential points, and residuals before checking the cross-validated mean squared error.
 
-\paragraph{Outliers}
+#Outliers
 Below are the Rstudent and Cook's Distance plots of our initial model.  There are a few worrisome points, having Cook's Distance greater than 0.05 and Rstudent above 2: Albania in 1800 where urbanization quadruples, Belgium post Black Plague (1400), where urbanization triples and England in 1850 where population doubles.  A cursory glance of history does not reveal much about changes in Albania in 1800, however its Cook's Distance is abnormally large and we will therefore remove it.  There are ties between urbanization and the Black Plague.  The Industrial Revolution begins in Britain in the 1800's and thus should explains its outlier status.  Those three points have been removed and the model rerun.  
 
 ```{r Outliers, echo = FALSE, message= FALSE, warning = FALSE, fig.height = 3}
@@ -93,7 +91,7 @@ title("After removal", outer = TRUE)
 
 ```
 
-\paragraph{Residuals}
+##Residuals
 We have plotted the residuals and the Q-Q Plot of `urb.lm`.  The residuals appeared without pattern but centered around 0.01.  The Q-Q Plot appears semi-linear with discrepancies throughout.  Neither of these plots are indicative of a strong model, further checking is required.
 
 
@@ -127,7 +125,7 @@ grid.arrange(lm.res, lm.qq, nrow = 1)
 
 ```
 
-\paragraph{Mean Squared Error}
+##Mean Squared Error
 
 ```{r CV LM, echo = FALSE, message = FALSE, warning = FALSE}
 
@@ -162,12 +160,12 @@ mse.lm <- cv.model(raj, lm, "urbanization ~ factor(country) + factor(year) +
 
 Instead of returnung the simple mean squared error, we felt it would be better suited to cross validate the mean squared error.  Using 5-fold cross validation, our algorithm returns a mean squared error of `r mse.lm`.
 
-\section{Secondary Modeling}
+#Secondary Modeling
 
-\paragraph{Introduction}
+##Introduction
 After testing a few different models, We chose to use a generalized linear model with different variables and interactions.  
 
-\paragraph{Decision Tree}
+##Decision Trees
 To help decide which variables to use, we used a decision tree, to see which variables were important for `urbanization`.  From our variable importance graph, we see that `initalConstr` is the most important variable followed by `execConstr` and `year`.  Our least important variables were `country`, `coastToArea` and `population`.  While the decision tree was useful for observing the importance of the variables, we did some brief testing of models without the least important variables, and they performed remarkably poorer than the final model we chose.
 
 
@@ -177,16 +175,16 @@ To help decide which variables to use, we used a decision tree, to see which var
 set.seed(100)
 
 urb.tree <- train(urbanization ~ ., data = raj,
-                      method = "ctree2",
+                      method = "ctree",
                       trControl = trainControl(method = "cv", number = 5),
-                      tuneGrid = expand.grid(maxdepth = 2:10))
+                      tuneGrid = expand.grid(mincriterion = 0.95))
 
 #Plotting important variables
 plot(varImp(urb.tree))
 
 ```
 
-\paragraph{Testing Models}
+#Testing Models
 We tested a few different models cross-validated mean squared errors and chose the one with the smallest value.  Below are the ones we tested.
 
 ```{r Testing Models, message = FALSE, warning = FALSE}
@@ -210,10 +208,11 @@ tm4 <- cv.model(raj, glm, "urbanization ~ factor(country) +
                                  ordered(initialConstr):atlTrade")
 
 ```
+
 The first test model `tm1`, without `country` or `westernEurope` had a cross-validated mean squared error of `r tm1`.  After `tm1`, we realized, while the decision tree did not see the importance of `country`, the model needed it to perform well.  The removal of `westernEurope` had no effect on the model, probably due its collinearity.  The second model, `tm2`, included `country` and removed `year`.  Its cross-validated mean squared error was `r tm2`.  While `tm2` performed better than `tm1`, performed worse than `urb.lm`.  Our third test model, `tm3`, removed `initialConstr`, its cross-validated mean square error was `r tm3`.  While `tm3` performed well, we had a hunch that removing the `coastToArea` interaction term could further improve the model.  `tm4` was our final test model, its cross-validated mean square error was `r tm4` and was the best of all of the four models.  We felt confident in `tm4` to continue our analysis. 
 
 
-\paragraph{Generalized Linear Model}
+##Generalized Linear Model
 As mentioned above, we used `tm4` as our final model.  `tm4`, now referred to as `urb.glm` had some differences from `urb.lm`.  We had removed the binary indicator for `westernEurope` due to its collinearity issues, as well as `year` as it did not have much of an effect on the model.  We removed `coastToArea` from the larger interaction term, but left the interaction term between `initialConstr` and `atlTrade` as per our initial theory.  We will continue to use the data with outliers removed based on our understanding that these points would still be outliers and overly influential.  The model is written below.
 
 ```{r GLM, message = FALSE, warning = FALSE}
@@ -224,7 +223,7 @@ urb.glm <- glm(urbanization ~ factor(country) +
 
 ```
 
-\paragraph{Table: GLM}
+##Table: GLM
 `urb.glm`'s coefficients are summarized below.  Similarly to `urb.lm`, only five countries have positive coefficients.  There is one insignificant country; Bulgaria.  The interaction between `atlTrade` and `areaToCoast` is still significant and has a positive coefficient, indicating greater `urbanization` (economic growth) per their interaction.  Our new variable, the interaction between `atlTrade` and `initialConstr` is significant on all levels with a negative coefficient on the low level, but positive effects on the other levels.  Interestingly, it appears that there is a point of initial executive constraint at which its influence no longer changes and the coefficient stabilizes between levels.  
 
 
@@ -235,12 +234,12 @@ kable(signif(urb.glm.tbl,2),digits=25, format = "latex")
 
 ```
 
-\section{Analysis of Secondary Model}
+#Analysis of Secondary Model
 
-\paragraph{Introduction}
+#Introduction
 Like we did with `urb.lm`, we analyzed `urb.glm`, Looking at outliers, influential points, residuals before checking the cross-validated mean squared error.  After checking `urb.glm`, we compared the two models.
 
-\paragraph{Outliers}
+#Outliers
 Below are the rstudent and Cooks Distance plots of `urb.glm`. Since we have removed the most worrisome outliers with `urb.lm`, the rstudent and Cook's Distance plot do not show many worrisome points.
 
 ```{r Outliers of GAM, echo = FALSE, message= FALSE, warning = FALSE, fig.height = 3}
@@ -258,7 +257,7 @@ title("After Removal", outer = TRUE)
 
 ```
 
-\paragraph{Residuals}
+#Residuals
 Below we have plotted the residuals and a Q-Q plot of `urb.glm`.  Our residuals appear patternless and centered around zero.  Our Q-Qplot appears mostly linear with some variability on the right tail. 
 
 ```{r Res GLM, echo = FALSE, message = FALSE, warning = FALSE, fig.Height = 1}
@@ -290,7 +289,7 @@ grid.arrange(glm.res, glm.qq, nrow = 1)
 
 ```
 
-\paragraph{Mean Squared Error}
+##Mean Squared Error
 ```{r MSE GLM, echo = FALSE, message = FALSE, warning = FALSE }
 
 mse.glm <- cv.model(raj, glm, "urbanization ~ factor(country) + (atlTrade:coastToArea) + atlTrade:ordered(initialConstr)")
@@ -300,9 +299,9 @@ mse.glm <- cv.model(raj, glm, "urbanization ~ factor(country) + (atlTrade:coastT
 Using the function we created earlier, `urb.glm` has a cross-validated mean squared error of `r mse.glm`.  
 
 
-\section{Comparing Models}
+#Comparing Models
 
-\paragraph{Introduction}
+##Introduction
 After analyzing `urb.lm` and `urb.glm` separately, we decided to compare the two models with a few different techniques.   
 
 ```{r Bootstrap MSE, echo = FALSE, message = FALSE, warning = FALSE}
@@ -345,17 +344,16 @@ pv <- mse.bootstrap(1000, urb.lm, urb.glm, "urbanization")
 
 ```
 
-\paragraph{Testing Models}
+##Testing Models
 We initially tested the differences between the two models with the use of Akaike Information Criterion and Bayesian Information Criterion, in both tests `urb.glm` returned a better result than `urb.lm`.  We compared the two Q-Q plots side by side, and `urb.glm`'s plot appears more linear, while `urb.lm`'s has severe discrepancies near the tails and the entirety of the right-hand side.
 
-\paragraph{Further Testing}
+##Further Testing
 While our preliminary testing had given us evidence that `urb.glm` was the better model, we decided additional testing was necessary.  We ran a hypothesis test between bootstrapped mean squared errors.  The probability under the basic linear model of observing a large gap in mean squared errors is 0.0009.  Using an alpha level of 0.05, we find the result significant.  Meaning, there is evidence to suggest that `urb.lm` does worse than `urb.glm`.
 
-\section{Conclusion}
+#Conclusion
 
-\paragraph{}
 We have tested and compared our two models.  While `urb.lm` performed well according to our cross-validated mean squared error, it has severe issues with collinearity.  `urb.glm`, Performed better on all of our testing, residuals and mean squared error.  All results give credence, to our belief that `urb.glm` is a better model than `urb.lm`.
 
 
-\paragraph{Understanding the model}
+##Understanding the model
 Our initial theory is well explained by `urb.glm`.  Our original theory posited that economic growth pre-Industrial Revolution is best explained by Atlantic trade and a free society.  `urb.glm` Included significant terms for Atlantic Trade both in interaction with Atlantic coastal area and with initial executive constraint in a country.  Similarly, the initial constraint in interaction with Atlantic trade is significant at all levels, indicating its importance to the model and evidence to our theory.  Interestingly the coefficient for initial constraint begins negative, moves positive and levels out.  We believe that this indicates that there is a limit to how free a country can be at which point executive constraint does not affect economic growth.  Conversely, having little executive constraint negatively affects economic growth.  We have found evidence to suggest that economic growth during the primitive accumulation was driven by Atlantic trade and executive constraint.
