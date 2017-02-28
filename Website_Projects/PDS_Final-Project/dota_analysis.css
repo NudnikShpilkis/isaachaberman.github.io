@@ -1,0 +1,24 @@
+h1>.anchor-link{
+    opacity: 0;
+}
+
+h1:hover>.anchor-link{
+    opacity: 1;
+}
+
+h2>.anchor-link{
+    opacity: 0;
+}
+
+h2:hover>.anchor-link{
+    opacity: 1;
+}
+
+
+h3>.anchor-link{
+    opacity: 0;
+}
+
+h3:hover>.anchor-link{
+    opacity: 1;
+}
