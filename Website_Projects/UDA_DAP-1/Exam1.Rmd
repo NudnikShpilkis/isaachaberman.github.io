@@ -49,7 +49,7 @@ The model's coefficients are summarized below.  Five of the countries have posit
 ```{r Initial Model Table, echo = FALSE, message = FALSE, warning= FALSE}
 
 urb.lm.tbl <- cbind(coefficients(summary(urb.lm))) 
-kable(signif(urb.lm.tbl,2),digits=25, format = "latex") 
+kable(signif(urb.lm.tbl,2),digits=25, format = "html") 
 
 ```
 
@@ -95,7 +95,7 @@ title("After removal", outer = TRUE)
 We have plotted the residuals and the Q-Q Plot of `urb.lm`.  The residuals appeared without pattern but centered around 0.01.  The Q-Q Plot appears semi-linear with discrepancies throughout.  Neither of these plots are indicative of a strong model, further checking is required.
 
 
-```{r Res Lm, echo = FALSE, message = FALSE, warning = FALSE, fig.Height = 1}
+```{r Res Lm, message = FALSE, warning = FALSE, fig.Height = 1}
 
 urb.lm.resid <- residuals(urb.lm)
 urb.lm.fit <- fitted(urb.lm)
@@ -127,7 +127,7 @@ grid.arrange(lm.res, lm.qq, nrow = 1)
 
 ##Mean Squared Error
 
-```{r CV LM, echo = FALSE, message = FALSE, warning = FALSE}
+```{r CV LM, message = FALSE, warning = FALSE}
 
 #Professors Code
 cv.model <- function(data, model, formulae, nfolds=5) {
@@ -169,7 +169,7 @@ After testing a few different models, We chose to use a generalized linear model
 To help decide which variables to use, we used a decision tree, to see which variables were important for `urbanization`.  From our variable importance graph, we see that `initalConstr` is the most important variable followed by `execConstr` and `year`.  Our least important variables were `country`, `coastToArea` and `population`.  While the decision tree was useful for observing the importance of the variables, we did some brief testing of models without the least important variables, and they performed remarkably poorer than the final model we chose.
 
 
-```{r Decision Tree, echo = FALSE, message = FALSE, warning = FALSE, fig.height= 3}
+```{r Decision Tree, message = FALSE, warning = FALSE, fig.height= 3}
 
 #Decision Tree
 set.seed(100)
@@ -230,7 +230,7 @@ urb.glm <- glm(urbanization ~ factor(country) +
 ```{r GLM Table, echo = FALSE, message = FALSE, warning = FALSE}
 
 urb.glm.tbl <- cbind(coefficients(summary(urb.glm))) 
-kable(signif(urb.glm.tbl,2),digits=25, format = "latex") 
+kable(signif(urb.glm.tbl,2),digits=25, format = "html") 
 
 ```
 
@@ -242,7 +242,7 @@ Like we did with `urb.lm`, we analyzed `urb.glm`, Looking at outliers, influenti
 #Outliers
 Below are the rstudent and Cooks Distance plots of `urb.glm`. Since we have removed the most worrisome outliers with `urb.lm`, the rstudent and Cook's Distance plot do not show many worrisome points.
 
-```{r Outliers of GAM, echo = FALSE, message= FALSE, warning = FALSE, fig.height = 3}
+```{r Outliers of GAM, message= FALSE, warning = FALSE, fig.height = 3}
 
 #Review Rstudent
 par(mfrow = c(1,2))
@@ -260,7 +260,7 @@ title("After Removal", outer = TRUE)
 #Residuals
 Below we have plotted the residuals and a Q-Q plot of `urb.glm`.  Our residuals appear patternless and centered around zero.  Our Q-Qplot appears mostly linear with some variability on the right tail. 
 
-```{r Res GLM, echo = FALSE, message = FALSE, warning = FALSE, fig.Height = 1}
+```{r Res GLM, message = FALSE, warning = FALSE, fig.Height = 1}
 
 urb.glm.resid <- residuals(urb.glm)
 urb.glm.fit <- fitted(urb.glm)
@@ -290,7 +290,7 @@ grid.arrange(glm.res, glm.qq, nrow = 1)
 ```
 
 ##Mean Squared Error
-```{r MSE GLM, echo = FALSE, message = FALSE, warning = FALSE }
+```{r MSE GLM, message = FALSE, warning = FALSE }
 
 mse.glm <- cv.model(raj, glm, "urbanization ~ factor(country) + (atlTrade:coastToArea) + atlTrade:ordered(initialConstr)")
 
@@ -304,7 +304,7 @@ Using the function we created earlier, `urb.glm` has a cross-validated mean squa
 ##Introduction
 After analyzing `urb.lm` and `urb.glm` separately, we decided to compare the two models with a few different techniques.   
 
-```{r Bootstrap MSE, echo = FALSE, message = FALSE, warning = FALSE}
+```{r Bootstrap MSE, message = FALSE, warning = FALSE}
 
 
 resample <- function(x){ 

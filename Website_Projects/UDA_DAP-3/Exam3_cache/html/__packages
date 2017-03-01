@@ -1,0 +1,12 @@
+base
+nlme
+mgcv
+knitr
+ggplot2
+scatterplot3d
+MASS
+poLCA
+lattice
+caret
+plyr
+np
